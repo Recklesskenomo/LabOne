@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Employee Registration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <meta name="description" content="">
+
+  <meta property="og:title" content="">
+  <meta property="og:type" content="">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="">
+  <meta property="og:image:alt" content="">
+
+  <link rel="icon" href="/AVfavicon.ico" sizes="any">
+  <link rel="icon" href="/AVicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="AVlogo.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#fafafa">
+</head>
+<body>
+<div class="container">
+  <!-- Image -->
+  <img src="AVlogo.png" alt="Welcome Image" class="welcome-image">
+
+  <!-- Welcome Message -->
+  <h1 class="welcome-message">Welcome to the Employee Registration portal</h1>
+
+  <!-- Registration for Form -->
+  <form class="registration-form" Registration successful method>
+    <h2>Employee Registration Form</h2>
+    <div class="field">
+      <label for="fname">First Name:</label>
+      <input type="text" id="fname" name="fname" required>
+    </div>
+    <div class="container">
+      <label for="lname">Last Name:</label>
+      <input type="text" id="lname" name="lname" required>
+    </div>
+    <div class="container">
+      <label for="role">Role:</label>
+      <input type="text" id="role" name="role" required>
+    </div>
+    <div>
+      <label for="contracttype">Contract Type:</label>
+      <input type="text" id="contracttype" name="contracttype" required>
+    </div>
+    <div class="container">
+      <label for="pnumber">Phone Number:</label>
+      <input type="text" id="pnumber" name="pnumber" required>
+    </div>
+    <div class="container">
+      <label for="nationalID">National ID:</label>
+      <input type="text" id="nationalID" name="nationalID" required>
+    </div>
+    <div>
+      <label for="email">Email:</label>
+      <input type="email" id="email" name="email" >
+    </div>
+    <!--submit button-->
+    <button type="submit">Register Employee</button>
+    <!--home button-->
+    <div class="error-message">
+      <button onclick="window.location.href='home.html'">Home</button>
+    </div>
+      <div class="container">
+        <button onclick="window.location.href='contactus.html'">Contact us</button>
+      </div>
+  </form>
+
+</div>
+</body>
+</html>
