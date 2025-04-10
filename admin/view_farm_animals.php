@@ -1,0 +1,349 @@
+<?php
+// Initialize the session
+session_start();
+ 
+// Check if the user is logged in, if not then redirect to login page
+if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true){
+    header("location: ../auth/login.php");
+    exit;
+}
+
+// Include database configuration
+require_once "../config.php";
+
+// Set constants for included files
+define('INCLUDED', true);
+
+// Include role manager
+require_once "../utils/role_manager.php";
+
+// Get admin user information from database
+$admin_id = $_SESSION["id"];
+
+// Initialize role manager
+$roleManager = new RoleManager($conn, $admin_id);
+
+// Check if user is admin
+if (!$roleManager->isAdmin()) {
+    // Not an admin, redirect to dashboard
+    header("location: ../dashboard.php");
+    exit;
+}
+
+// Check if farm ID is provided
+if(!isset($_GET["farm_id"]) || empty($_GET["farm_id"])){
+    header("location: user_management.php");
+    exit;
+}
+
+$farm_id = intval($_GET["farm_id"]);
+$farm_data = [];
+$animals = [];
+$error_msg = "";
+$success_msg = "";
+
+// Get farm information
+$sql = "SELECT f.*, u.username, u.first_name, u.last_name, u.id as user_id 
+        FROM farms f
+        JOIN users u ON f.user_id = u.id
+        WHERE f.id = ?";
+if($stmt = mysqli_prepare($conn, $sql)){
+    mysqli_stmt_bind_param($stmt, "i", $farm_id);
+    
+    if(mysqli_stmt_execute($stmt)){
+        $result = mysqli_stmt_get_result($stmt);
+        
+        if(mysqli_num_rows($result) == 1){
+            $farm_data = mysqli_fetch_assoc($result);
+        } else {
+            $error_msg = "Farm not found.";
+        }
+    } else {
+        $error_msg = "Error retrieving farm data.";
+    }
+    
+    mysqli_stmt_close($stmt);
+}
+
+// Get animal information
+if(empty($error_msg)){
+    $sql = "SELECT * FROM animals WHERE farm_id = ? ORDER BY animal_name";
+    if($stmt = mysqli_prepare($conn, $sql)){
+        mysqli_stmt_bind_param($stmt, "i", $farm_id);
+        
+        if(mysqli_stmt_execute($stmt)){
+            $result = mysqli_stmt_get_result($stmt);
+            
+            while($row = mysqli_fetch_assoc($result)){
+                $animals[] = $row;
+            }
+        } else {
+            $error_msg = "Error retrieving animal data.";
+        }
+        
+        mysqli_stmt_close($stmt);
+    }
+}
+
+// Get animal health records
+if(empty($error_msg) && !empty($animals)){
+    foreach($animals as &$animal){
+        $sql = "SELECT * FROM animal_health WHERE animal_id = ? ORDER BY assessment_date DESC LIMIT 1";
+        if($stmt = mysqli_prepare($conn, $sql)){
+            mysqli_stmt_bind_param($stmt, "i", $animal['id']);
+            
+            if(mysqli_stmt_execute($stmt)){
+                $result = mysqli_stmt_get_result($stmt);
+                
+                if(mysqli_num_rows($result) > 0){
+                    $animal['health_record'] = mysqli_fetch_assoc($result);
+                }
+            }
+            
+            mysqli_stmt_close($stmt);
+        }
+    }
+}
+
+// Log the action
+if (function_exists('add_log_entry')) {
+    add_log_entry($conn, 'info', $admin_id, "Admin viewed animals for farm ID {$farm_id}", $_SERVER['REMOTE_ADDR']);
+}
+
+// Set page title and include header
+$pageTitle = "Farm Animals - Agro Vision";
+include_once '../includes/header.php';
+?>
+
+<div class="container mx-auto px-4 py-8">
+    <!-- Admin Header -->
+    <div class="flex flex-col md:flex-row justify-between items-center bg-base-100 p-6 rounded-lg shadow-lg mb-8">
+        <div class="mb-4 md:mb-0">
+            <h1 class="text-2xl font-bold">Farm Animals</h1>
+            <p class="text-base-content/70">
+                <?php if (!empty($farm_data)): ?>
+                    View all animals for <?php echo htmlspecialchars($farm_data['farm_name']); ?>
+                <?php else: ?>
+                    Farm Details Not Available
+                <?php endif; ?>
+            </p>
+            <div class="badge badge-primary mt-2">Administrator Access</div>
+        </div>
+        <img src="../assets/images/AVlogo.png" alt="Logo" class="logo-img">
+    </div>
+    
+    <!-- Messages -->
+    <?php if (!empty($success_msg)): ?>
+    <div class="alert alert-success mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span><?php echo $success_msg; ?></span>
+    </div>
+    <?php endif; ?>
+    
+    <?php if (!empty($error_msg)): ?>
+    <div class="alert alert-error mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span><?php echo $error_msg; ?></span>
+    </div>
+    <?php endif; ?>
+    
+    <?php if (!empty($farm_data)): ?>
+    <!-- Farm Info Banner -->
+    <div class="bg-base-100 p-6 rounded-lg shadow-lg mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+            <div>
+                <h2 class="text-xl font-bold"><?php echo htmlspecialchars($farm_data['farm_name']); ?></h2>
+                <p class="text-base-content/70"><?php echo htmlspecialchars($farm_data['location']); ?> - 
+                    <?php echo htmlspecialchars($farm_data['farm_type']); ?> Farm, 
+                    <?php echo htmlspecialchars($farm_data['size']); ?> acres</p>
+                <p class="text-sm mt-1">Owned by: <?php echo htmlspecialchars($farm_data['first_name'] . ' ' . $farm_data['last_name'] . ' (' . $farm_data['username'] . ')'); ?></p>
+            </div>
+            <div class="flex gap-2 mt-4 md:mt-0">
+                <a href="view_farm_details.php?id=<?php echo $farm_id; ?>" class="btn btn-outline">Back to Farm Details</a>
+                <a href="user_data_modules.php?id=<?php echo $farm_data['user_id']; ?>" class="btn btn-outline">Owner Data</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Animals List -->
+    <div class="bg-base-100 p-6 rounded-lg shadow-lg mb-8">
+        <h2 class="text-xl font-bold mb-4 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Animals (<?php echo count($animals); ?>)
+        </h2>
+        
+        <?php if (empty($animals)): ?>
+            <div class="alert alert-info">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>No animals have been registered for this farm yet.</span>
+            </div>
+        <?php else: ?>
+            <div class="overflow-x-auto">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Breed</th>
+                            <th>Gender</th>
+                            <th>Age</th>
+                            <th>Quantity</th>
+                            <th>Purpose</th>
+                            <th>Health</th>
+                            <th>Registration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($animals as $animal): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($animal['id']); ?></td>
+                            <td class="font-medium"><?php echo htmlspecialchars($animal['animal_name']); ?></td>
+                            <td><?php echo htmlspecialchars($animal['animal_type']); ?></td>
+                            <td><?php echo htmlspecialchars($animal['breed']); ?></td>
+                            <td><?php echo htmlspecialchars($animal['gender']); ?></td>
+                            <td><?php echo !empty($animal['date_of_birth']) ? calculate_age($animal['date_of_birth']) : 'Unknown'; ?></td>
+                            <td><?php echo htmlspecialchars($animal['quantity']); ?></td>
+                            <td><?php echo htmlspecialchars($animal['purpose']); ?></td>
+                            <td>
+                                <div class="badge <?php echo getHealthBadgeClass($animal['health_status']); ?>">
+                                    <?php echo htmlspecialchars($animal['health_status']); ?>
+                                </div>
+                                <?php if (!empty($animal['health_record'])): ?>
+                                <div class="text-xs mt-1">
+                                    Last check: <?php echo date('M d, Y', strtotime($animal['health_record']['assessment_date'])); ?>
+                                </div>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo date('M d, Y', strtotime($animal['created_at'])); ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+    
+    <!-- Health Status Summary -->
+    <?php if (!empty($animals)): ?>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-base-100 p-6 rounded-lg shadow-lg">
+            <h3 class="text-lg font-bold mb-4">Health Status Overview</h3>
+            <?php
+            // Prepare health status counts
+            $healthCounts = [
+                'Healthy' => 0,
+                'Sick' => 0,
+                'Monitoring' => 0,
+                'Treatment' => 0,
+                'Other' => 0
+            ];
+            
+            foreach ($animals as $animal) {
+                $status = $animal['health_status'];
+                if (isset($healthCounts[$status])) {
+                    $healthCounts[$status] += $animal['quantity'];
+                } else {
+                    $healthCounts['Other'] += $animal['quantity'];
+                }
+            }
+            
+            // Calculate total animals
+            $totalAnimals = array_sum($healthCounts);
+            ?>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <?php foreach ($healthCounts as $status => $count): ?>
+                <?php if ($count > 0): ?>
+                <div class="stat bg-base-200 p-3 rounded-lg">
+                    <div class="stat-title"><?php echo htmlspecialchars($status); ?></div>
+                    <div class="stat-value text-lg"><?php echo $count; ?></div>
+                    <div class="stat-desc">
+                        <?php echo round(($count / $totalAnimals) * 100, 1); ?>% of total
+                    </div>
+                </div>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        
+        <div class="bg-base-100 p-6 rounded-lg shadow-lg">
+            <h3 class="text-lg font-bold mb-4">Animal Type Distribution</h3>
+            <?php
+            // Prepare animal type counts
+            $typeCounts = [];
+            
+            foreach ($animals as $animal) {
+                $type = $animal['animal_type'];
+                if (!isset($typeCounts[$type])) {
+                    $typeCounts[$type] = 0;
+                }
+                $typeCounts[$type] += $animal['quantity'];
+            }
+            ?>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <?php foreach ($typeCounts as $type => $count): ?>
+                <div class="stat bg-base-200 p-3 rounded-lg">
+                    <div class="stat-title"><?php echo htmlspecialchars($type); ?></div>
+                    <div class="stat-value text-lg"><?php echo $count; ?></div>
+                    <div class="stat-desc">
+                        <?php echo round(($count / $totalAnimals) * 100, 1); ?>% of total
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+    
+    <?php endif; ?>
+    
+    <!-- Admin Navigation -->
+    <div class="flex justify-between items-center bg-base-100 p-6 rounded-lg shadow-lg">
+        <div>
+            <a href="../dashboard.php" class="btn btn-outline mr-2">Back to Dashboard</a>
+            <a href="view_farm_details.php?id=<?php echo $farm_id; ?>" class="btn btn-outline mr-2">Farm Details</a>
+            <a href="view_farm_employees.php?farm_id=<?php echo $farm_id; ?>" class="btn btn-outline mr-2">Farm Employees</a>
+            <a href="user_management.php" class="btn btn-outline mr-2">User Management</a>
+        </div>
+        <a href="../auth/logout.php" class="btn btn-secondary">Logout</a>
+    </div>
+</div>
+
+<?php
+// Helper function to calculate age from date of birth
+function calculate_age($dob) {
+    $birth = new DateTime($dob);
+    $today = new DateTime('today');
+    $age = $birth->diff($today);
+    
+    if ($age->y > 0) {
+        return $age->y . ' year' . ($age->y > 1 ? 's' : '');
+    } elseif ($age->m > 0) {
+        return $age->m . ' month' . ($age->m > 1 ? 's' : '');
+    } else {
+        return $age->d . ' day' . ($age->d > 1 ? 's' : '');
+    }
+}
+
+// Helper function to get appropriate badge class based on health status
+function getHealthBadgeClass($status) {
+    switch (strtolower($status)) {
+        case 'healthy':
+            return 'badge-success';
+        case 'sick':
+            return 'badge-error';
+        case 'treatment':
+            return 'badge-warning';
+        case 'monitoring':
+            return 'badge-info';
+        default:
+            return 'badge-ghost';
+    }
+}
+
+include_once '../includes/footer.php'; 
+?> 
